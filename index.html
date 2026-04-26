@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EduAuth | Neural Biometric Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        
+        :root {
+            --primary: #6366f1;
+            --primary-glow: rgba(99, 102, 241, 0.4);
+            --emerald: #10b981;
+            --bg: #020617;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg);
+            color: #f8fafc;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .font-space { font-family: 'Space Grotesk', sans-serif; }
+
+        /* Loader Styles */
+        #loader-screen {
+            position: fixed;
+            inset: 0;
+            background: #020617;
+            z-index: 500;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 1s cubic-bezier(0.65, 0, 0.35, 1);
+        }
+
+        .loader-ring {
+            width: 160px; height: 160px;
+            border: 2px solid rgba(99, 102, 241, 0.1);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s cubic-bezier(0.5, 0.1, 0.5, 0.9) infinite;
+        }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .progress-container {
+            width: 280px; height: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px; margin-top: 40px;
+            overflow: hidden;
+        }
+
+        #progress-bar {
+            width: 0%; height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--emerald));
+            transition: width 0.5s ease;
+        }
+
+        /* Glassmorphism */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .video-container {
+            position: relative;
+            background: #000;
+            border-radius: 2rem;
+            overflow: hidden;
+            box-shadow: 0 0 50px -12px rgba(99, 102, 241, 0.2);
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .btn-neon {
+            background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%);
+            box-shadow: 0 8px 16px -4px var(--primary-glow);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .btn-neon:hover { transform: translateY(-2px); filter: brightness(1.1); }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+
+        .ai-pulse { animation: pulse-border 3s infinite; }
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(99, 102, 241, 0.2); }
+            50% { border-color: rgba(16, 185, 129, 0.4); }
+        }
+
+        .modal-backdrop {
+            position: fixed; inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            visibility: hidden; opacity: 0;
+            transition: all 0.3s ease;
+        }
+        .modal-backdrop.active { visibility: visible; opacity: 1; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+    <!-- CONFIRMATION MODAL -->
+    <div id="confirm-modal" class="modal-backdrop">
+        <div class="glass-panel p-8 rounded-3xl max-w-sm w-full text-center border-red-500/20">
+            <h3 class="text-xl font-black text-white mb-2 font-space">PURGE DATABASE?</h3>
+            <p class="text-slate-400 text-[10px] uppercase tracking-widest mb-6">Action is irreversible. Biometric maps will be lost.</p>
+            <div class="flex gap-4">
+                <button onclick="closeModal()" class="flex-1 py-3 bg-slate-800 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white">Aborted</button>
+                <button onclick="performReset()" class="flex-1 py-3 bg-red-600 rounded-xl font-black text-[10px] uppercase tracking-widest text-white">Confirm Purge</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOADER SCREEN -->
+    <div id="loader-screen">
+        <div class="relative flex items-center justify-center">
+            <div class="loader-ring"></div>
+            <div class="absolute text-indigo-500 font-black text-2xl font-space">EA</div>
+        </div>
+        <div class="text-center mt-8">
+            <h2 class="text-xl font-black tracking-[0.4em] text-white font-space">EDUAUTH <span class="text-indigo-500">NEURAL</span></h2>
+            <p id="loader-status" class="text-[9px] font-black text-slate-500 uppercase tracking-[0.5em] mt-3">Booting Biometric Kernels...</p>
+        </div>
+        <div class="progress-container">
+            <div id="progress-bar"></div>
+        </div>
+    </div>
+
+    <!-- MAIN UI -->
+    <div id="main-content" class="opacity-0 transition-opacity duration-1000">
+        <header class="max-w-[1600px] mx-auto mb-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div class="flex items-center gap-5">
+                <div class="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg border border-white/10">
+                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-tighter text-white font-space uppercase">EduAuth <span class="text-indigo-500">v2.0</span></h1>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <p class="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">Neural Intelligence Active</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel px-6 py-3 rounded-2xl flex items-center gap-4">
+                <div class="text-right">
+                    <p id="current-date" class="text-[8px] font-black text-indigo-400 uppercase tracking-widest">-- --- ----</p>
+                    <p id="current-lecture-info" class="text-xs font-black text-white font-space">STANDBY_MODE</p>
+                </div>
+                <div class="w-px h-8 bg-white/10"></div>
+                <button id="clear-db-btn" class="text-slate-500 hover:text-red-500 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                </button>
+            </div>
+        </header>
+
+        <main class="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- LEFT: SENSOR HUB -->
+            <div class="lg:col-span-8 space-y-6">
+                <div class="video-container aspect-video relative group">
+                    <video id="video" class="w-full h-full object-cover scale-x-[-1]" autoplay muted playsinline></video>
+                    <canvas id="overlay"></canvas>
+                    
+                    <!-- HUD Status Overlays -->
+                    <div class="absolute bottom-6 left-6 z-20 flex flex-col gap-2">
+                        <div id="ai-indicator" class="hidden bg-indigo-500/20 backdrop-blur-md px-4 py-2 rounded-lg border border-indigo-500/30 flex items-center gap-3">
+                            <div class="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></div>
+                            <span class="text-[9px] font-black uppercase text-indigo-100 tracking-widest">Querying OpenRouter Neural Net...</span>
+                        </div>
+                    </div>
+
+                    <!-- Scan Decoration -->
+                    <div class="absolute inset-0 border-[20px] border-white/[0.02] pointer-events-none"></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button id="start-btn" class="btn-neon py-4 rounded-xl font-black uppercase text-[10px] tracking-widest text-white">Initialize Optics</button>
+                    <button id="enroll-toggle" class="glass-panel py-4 rounded-xl font-black uppercase text-[10px] tracking-widest text-slate-300">Biometric Enroll</button>
+                    <button id="ai-audit-btn" class="bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-black uppercase text-[10px] tracking-widest text-white shadow-lg shadow-emerald-900/40">Neural Audit</button>
+                </div>
+
+                <!-- ENROLLMENT PANEL -->
+                <div id="enroll-panel" class="glass-panel p-8 rounded-[2rem] hidden border-indigo-500/20 space-y-8 ai-pulse">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-6">01. Create Identity</h3>
+                            <div class="space-y-3">
+                                <input id="new-name" type="text" placeholder="Full Name" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-5 py-3 text-sm font-bold focus:border-indigo-500 outline-none transition-all">
+                                <input id="new-roll" type="number" placeholder="Roll Number" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-5 py-3 text-sm font-bold focus:border-indigo-500 outline-none transition-all">
+                                <button id="add-student-btn" class="w-full bg-indigo-600 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest text-white">Register to Ledger</button>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-6">02. Map Biometrics</h3>
+                            <div class="space-y-3">
+                                <select id="enroll-select" class="w-full bg-slate-900 border border-slate-700 rounded-xl px-5 py-3 text-sm font-bold focus:border-emerald-500 outline-none text-white"></select>
+                                <button id="capture-face-btn" class="w-full bg-emerald-600 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest text-white">Execute Scan</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI AUDIT RESULTS -->
+                <div id="ai-results" class="glass-panel p-8 rounded-[2rem] hidden border-emerald-500/30">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center">
+                                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                            </div>
+                            <h3 class="text-xs font-black uppercase tracking-widest text-white">Neural Audit Report</h3>
+                        </div>
+                        <button onclick="document.getElementById('ai-results').classList.add('hidden')" class="text-slate-500 hover:text-white">✕</button>
+                    </div>
+                    <div id="ai-report-content" class="text-slate-300 text-xs leading-relaxed space-y-4 font-medium max-h-[250px] overflow-y-auto custom-scrollbar whitespace-pre-wrap"></div>
+                </div>
+            </div>
+
+            <!-- RIGHT: LEDGER & ANALYTICS -->
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-panel p-6 rounded-[2.5rem] flex flex-col h-[500px]">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-[10px] font-black uppercase tracking-widest text-indigo-400">Activity Ledger</h2>
+                        <span id="save-status" class="text-[8px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full opacity-0">Synced</span>
+                    </div>
+                    <div id="attendance-table" class="overflow-y-auto flex-1 pr-2 space-y-3 custom-scrollbar"></div>
+                    <div class="mt-6">
+                        <button id="export-btn" class="w-full bg-white/5 py-4 rounded-xl font-black uppercase text-[9px] tracking-widest text-white border border-white/5 hover:bg-white/10 transition-all">Export Detailed XLSX</button>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-6 rounded-[2.5rem] flex flex-col h-[350px] border-emerald-500/10">
+                    <div class="flex items-center gap-3 mb-4">
+                        <div class="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-[10px] font-black text-white">NC</div>
+                        <h2 class="text-[10px] font-black uppercase tracking-widest text-emerald-400">Neural Chat Companion</h2>
+                    </div>
+                    <div id="chat-window" class="flex-1 space-y-3 pr-2 mb-4 overflow-y-auto custom-scrollbar text-[11px]">
+                        <div class="bg-slate-800/50 p-3 rounded-2xl rounded-tl-none border border-white/5 text-slate-400 italic">Core synchronized. Ask me about attendance patterns or specific student history.</div>
+                    </div>
+                    <div class="relative">
+                        <input id="chat-input" type="text" placeholder="Inquire Neural Core..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs text-white outline-none focus:border-emerald-500 transition-all">
+                        <button id="send-chat" class="absolute right-3 top-2.5 text-emerald-500 hover:text-emerald-400">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M13 5l7 7-7 7M5 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="fixed bottom-8 left-1/2 -translate-x-1/2 glass-panel px-8 py-4 rounded-2xl transform translate-y-40 transition-all duration-500 z-[600] border-l-4 border-indigo-500 flex items-center gap-4">
+        <div id="toast-icon" class="w-2 h-2 rounded-full bg-indigo-500"></div>
+        <p id="toast-msg" class="text-[10px] font-black text-white uppercase tracking-widest"></p>
+    </div>
+
+    <script>
+        // --- CONSTANTS ---
+        const apiKey = "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"; // Set by environment
+        const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+        const GPT_MODEL = "openai/gpt-4o-mini";
+        
+        const DEFAULT_STUDENTS = [
+            { roll: 240070800037, name: "Pankaj" },
+            { roll: 240070800043, name: "Raj Guru Yadav" },
+            { roll: 240070800044, name: "Ritik" },
+            { roll: 240070800046, name: "Rohit Joshi" },
+            { roll: 240070800048, name: "Roshan Sinha" }
+        ];
+
+        const TIMETABLE = [
+            { id: 1, start: "09:00", end: "10:00" }, { id: 2, start: "10:00", end: "11:00" },
+            { id: 3, start: "11:00", end: "12:00" }, { id: 4, start: "12:00", end: "13:00" },
+            { id: 5, start: "14:00", end: "15:00" }, { id: 6, start: "15:00", end: "16:00" },
+            { id: 7, start: "16:00", end: "17:00" }
+        ];
+
+        // --- STATE ---
+        let studentsDB = JSON.parse(localStorage.getItem('eduauth_students_db')) || [...DEFAULT_STUDENTS];
+        let attendanceDB = JSON.parse(localStorage.getItem('eduauth_attendance_db') || '[]');
+        let faceDescriptors = JSON.parse(localStorage.getItem('eduauth_face_data') || '[]');
+        let faceMatcher = null;
+        let isStreaming = false;
+        let currentLecture = null;
+        let hudState = {
+            active: false,
+            label: 'IDLE',
+            color: '#6366f1',
+            box: null,
+            landmarks: null,
+            lastMatchTime: 0
+        };
+
+        // --- DOM ---
+        const video = document.getElementById('video');
+        const overlay = document.getElementById('overlay');
+        const ctx = overlay.getContext('2d');
+        const startBtn = document.getElementById('start-btn');
+        const enrollToggle = document.getElementById('enroll-toggle');
+        const enrollPanel = document.getElementById('enroll-panel');
+        const enrollSelect = document.getElementById('enroll-select');
+        const captureFaceBtn = document.getElementById('capture-face-btn');
+        const attendanceList = document.getElementById('attendance-table');
+        const chatWindow = document.getElementById('chat-window');
+        const chatInput = document.getElementById('chat-input');
+        const sendChatBtn = document.getElementById('send-chat');
+        const aiAuditBtn = document.getElementById('ai-audit-btn');
+        const clearDbBtn = document.getElementById('clear-db-btn');
+
+        // --- HUD ANIMATION LOGIC ---
+        let scanLineY = 0;
+        let rotationAngle = 0;
+
+        function animateHUD() {
+            if (!isStreaming) return requestAnimationFrame(animateHUD);
+            
+            ctx.clearRect(0, 0, overlay.width, overlay.height);
+            
+            if (hudState.active && hudState.box) {
+                const { x, y, width, height } = hudState.box;
+                const centerX = x + width / 2;
+                const centerY = y + height / 2;
+                const radius = Math.max(width, height) * 0.7;
+                const isSuccess = hudState.color === '#10b981';
+
+                // 1. Draw Brackets
+                ctx.strokeStyle = hudState.color;
+                ctx.lineWidth = 3;
+                const bLen = width * 0.2;
+                
+                // Top Left
+                ctx.beginPath(); ctx.moveTo(x, y + bLen); ctx.lineTo(x, y); ctx.lineTo(x + bLen, y); ctx.stroke();
+                // Top Right
+                ctx.beginPath(); ctx.moveTo(x + width - bLen, y); ctx.lineTo(x + width, y); ctx.lineTo(x + width, y + bLen); ctx.stroke();
+                // Bottom Left
+                ctx.beginPath(); ctx.moveTo(x, y + height - bLen); ctx.lineTo(x, y + height); ctx.lineTo(x + bLen, y + height); ctx.stroke();
+                // Bottom Right
+                ctx.beginPath(); ctx.moveTo(x + width - bLen, y + height); ctx.lineTo(x + width, y + height); ctx.lineTo(x + width, y + height - bLen); ctx.stroke();
+
+                // 2. Vertical Scan Line
+                scanLineY = (scanLineY + 2) % height;
+                const grad = ctx.createLinearGradient(x, y + scanLineY, x + width, y + scanLineY);
+                grad.addColorStop(0, 'transparent');
+                grad.addColorStop(0.5, hudState.color);
+                grad.addColorStop(1, 'transparent');
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(x + 5, y + scanLineY); ctx.lineTo(x + width - 5, y + scanLineY); ctx.stroke();
+
+                // 3. Rotating HUD Ring
+                rotationAngle += 0.05;
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotationAngle);
+                ctx.strokeStyle = hudState.color;
+                ctx.lineWidth = 1;
+                ctx.setLineDash([10, 20]);
+                ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.stroke();
+                ctx.restore();
+
+                // 4. Face Landmarks (Dots)
+                if (hudState.landmarks) {
+                    ctx.fillStyle = hudState.color;
+                    hudState.landmarks.positions.forEach((p, i) => {
+                        if (i % 5 === 0) { // Sparse points for cleaner look
+                            ctx.beginPath(); ctx.arc(p.x, p.y, 1.5, 0, Math.PI * 2); ctx.fill();
+                        }
+                    });
+                }
+
+                // 5. Labels
+                ctx.fillStyle = hudState.color;
+                ctx.font = '900 10px Space Grotesk';
+                ctx.fillText(hudState.label.toUpperCase(), x, y - 10);
+                
+                ctx.font = '500 7px Space Grotesk';
+                ctx.fillText(`GEO_MAP: ${Math.floor(width)}x${Math.floor(height)}`, x + width + 5, y + 10);
+                ctx.fillText(`OSC_FRQ: ${Math.random().toFixed(4)}`, x + width + 5, y + 20);
+                ctx.fillText(`STATUS: ${isSuccess ? 'VERIFIED' : 'ANALYZING'}`, x + width + 5, y + 30);
+                
+                // Reset dash
+                ctx.setLineDash([]);
+            } else {
+                // Idle scanning effect
+                ctx.strokeStyle = 'rgba(99, 102, 241, 0.1)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(overlay.width*0.25, overlay.height*0.25, overlay.width*0.5, overlay.height*0.5);
+                ctx.fillStyle = 'rgba(99, 102, 241, 0.3)';
+                ctx.font = '900 8px Space Grotesk';
+                ctx.fillText("WAITING FOR BIOMETRIC INPUT...", 20, 30);
+            }
+
+            requestAnimationFrame(animateHUD);
+        }
+
+        // --- CORE LOGIC ---
+        window.onload = async () => {
+            initDailyRecords();
+            initStudentDropdown();
+            updateLectureStatus();
+            renderAttendance();
+            await loadFaceModels();
+            animateHUD();
+            setInterval(updateLectureStatus, 15000);
+        };
+
+        async function loadFaceModels() {
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model';
+            updateLoader(30, 'Optic Calibration');
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            updateLoader(60, 'Neural Kernel Init');
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            updateLoader(90, 'Syncing Biometric Maps');
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+            buildFaceMatcher();
+            updateLoader(100, 'All Systems Nominal');
+            
+            setTimeout(() => {
+                document.getElementById('loader-screen').style.opacity = '0';
+                document.getElementById('loader-screen').style.pointerEvents = 'none';
+                document.getElementById('main-content').style.opacity = '1';
+            }, 800);
+        }
+
+        function updateLoader(pct, status) {
+            document.getElementById('progress-bar').style.width = pct + '%';
+            document.getElementById('loader-status').innerText = status.toUpperCase() + '...';
+        }
+
+        async function startOptics() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720, facingMode: "user" }
+                });
+                video.srcObject = stream;
+                isStreaming = true;
+                
+                video.onplay = () => {
+                    const displaySize = { width: video.clientWidth, height: video.clientHeight };
+                    overlay.width = displaySize.width;
+                    overlay.height = displaySize.height;
+                    faceapi.matchDimensions(overlay, displaySize);
+
+                    setInterval(async () => {
+                        if (!isStreaming) return;
+                        const detections = await faceapi.detectAllFaces(video, new faceapi.TinyFaceDetectorOptions())
+                            .withFaceLandmarks().withFaceDescriptors();
+                        
+                        const resized = faceapi.resizeResults(detections, displaySize);
+                        
+                        if (resized.length > 0) {
+                            const d = resized[0];
+                            hudState.active = true;
+                            hudState.box = d.detection.box;
+                            hudState.landmarks = d.landmarks;
+                            
+                            if (faceMatcher) {
+                                const match = faceMatcher.findBestMatch(d.descriptor);
+                                if (match.label !== 'unknown' && match.distance < 0.45) {
+                                    hudState.label = match.label;
+                                    hudState.color = '#10b981';
+                                    markAttendance(match.label);
+                                } else {
+                                    hudState.label = 'UNKNOWN_ID';
+                                    hudState.color = '#6366f1';
+                                }
+                            } else {
+                                hudState.label = 'NO_MAPS_FOUND';
+                                hudState.color = '#6366f1';
+                            }
+                        } else {
+                            hudState.active = false;
+                            hudState.box = null;
+                        }
+                    }, 100);
+                };
+            } catch (err) { showToast("OPTIC_HW_FAILURE"); }
+        }
+
+        function markAttendance(name) {
+            if (!currentLecture) return;
+            const today = new Date().toLocaleDateString('en-GB');
+            const record = attendanceDB.find(r => r.date === today && r.name === name);
+            if (record && record[`L${currentLecture}`] === 'A') {
+                record[`L${currentLecture}`] = 'P';
+                saveDB();
+                renderAttendance();
+                showToast(`VERIFIED: ${name.toUpperCase()}`, true);
+            }
+        }
+
+        function buildFaceMatcher() {
+            if (faceDescriptors.length === 0) return;
+            const labeled = faceDescriptors.map(item =>
+                new faceapi.LabeledFaceDescriptors(item.name, item.descriptors.map(d => new Float32Array(d)))
+            );
+            faceMatcher = new faceapi.FaceMatcher(labeled, 0.45);
+        }
+
+        async function captureBiometrics() {
+            if (!isStreaming) return showToast("SENSOR_OFFLINE");
+            const name = enrollSelect.value;
+            captureFaceBtn.innerText = "SCANNING...";
+            
+            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks().withFaceDescriptor();
+            
+            if (detection) {
+                const existing = faceDescriptors.find(d => d.name === name);
+                const descArray = Array.from(detection.descriptor);
+                if (existing) existing.descriptors = [descArray];
+                else faceDescriptors.push({ name, descriptors: [descArray] });
+                
+                localStorage.setItem('eduauth_face_data', JSON.stringify(faceDescriptors));
+                buildFaceMatcher();
+                showToast(`BIOMETRICS_MAPPED: ${name.toUpperCase()}`, true);
+            } else {
+                showToast("SCAN_FAILED_POOR_VISIBILITY");
+            }
+            captureFaceBtn.innerText = "EXECUTE SCAN";
+        }
+
+        // --- AI INTERFACE (OpenRouter + ChatGPT) ---
+        async function runAudit() {
+            const resultsPanel = document.getElementById('ai-results');
+            const content = document.getElementById('ai-report-content');
+            resultsPanel.classList.remove('hidden');
+            content.innerHTML = "<div class='animate-pulse text-emerald-400 font-black'>NEURAL CORE ANALYZING DATA...</div>";
+            
+            const logs = attendanceDB.map(r => `${r.name}(R${r.roll}) ${r.date}: [L1-L7: ${r.L1},${r.L2},${r.L3},${r.L4},${r.L5},${r.L6},${r.L7}]`).join('\n');
+            const prompt = `Perform an academic audit on these logs:\n${logs}\n\nIdentify trends, chronic absenteeism, and summarize today's performance. Be professional and data-driven. Use markdown.`;
+            
+            const result = await callOpenRouter(prompt, "You are an AI Academic Auditor.");
+            content.innerText = result;
+        }
+
+        async function callOpenRouter(prompt, system) {
+            document.getElementById('ai-indicator').classList.remove('hidden');
+            try {
+                const response = await fetch(OPENROUTER_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`,
+                        "HTTP-Referer": window.location.origin,
+                        "X-Title": "EduAuth Neural Intelligence"
+                    },
+                    body: JSON.stringify({
+                        model: GPT_MODEL,
+                        messages: [
+                            { role: "system", content: system },
+                            { role: "user", content: prompt }
+                        ]
+                    })
+                });
+                const data = await response.json();
+                return data.choices?.[0]?.message?.content || "NO_RESPONSE_ERROR";
+            } catch (e) {
+                console.error("AI Error:", e);
+                return "NEURAL_NET_OFFLINE";
+            }
+            finally { document.getElementById('ai-indicator').classList.add('hidden'); }
+        }
+
+        // --- UI HELPERS ---
+        function initDailyRecords() {
+            const today = new Date().toLocaleDateString('en-GB');
+            const existing = attendanceDB.filter(r => r.date === today);
+            studentsDB.forEach(s => {
+                if (!existing.some(r => r.roll == s.roll)) {
+                    attendanceDB.push({
+                        roll: s.roll, name: s.name, date: today,
+                        L1:'A', L2:'A', L3:'A', L4:'A', L5:'A', L6:'A', L7:'A'
+                    });
+                }
+            });
+            saveDB();
+        }
+
+        function initStudentDropdown() {
+            enrollSelect.innerHTML = "";
+            studentsDB.sort((a,b)=>a.roll-b.roll).forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.name;
+                opt.innerText = `${s.roll} | ${s.name.toUpperCase()}`;
+                enrollSelect.appendChild(opt);
+            });
+            document.getElementById('current-date').innerText = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric'}).toUpperCase();
+        }
+
+        function updateLectureStatus() {
+            const now = new Date();
+            const time = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            currentLecture = null;
+            for(let l of TIMETABLE) {
+                if(time >= l.start && time < l.end) { currentLecture = l.id; break; }
+            }
+            document.getElementById('current-lecture-info').innerHTML = currentLecture ? `<span class="text-emerald-500">●</span> LECTURE_0${currentLecture}` : "STDBY_IDLE";
+        }
+
+        function renderAttendance() {
+            const today = new Date().toLocaleDateString('en-GB');
+            const list = attendanceDB.filter(r => r.date === today).sort((a,b)=>a.roll-b.roll);
+            attendanceList.innerHTML = list.map(r => `
+                <div class="glass-panel p-4 rounded-2xl flex items-center justify-between border-l-4 transition-all ${Object.values(r).includes('P') ? 'border-emerald-500' : 'border-slate-700'}">
+                    <div>
+                        <p class="text-[7px] font-black text-slate-500 tracking-widest mb-0.5">HEX_ID: 0x${r.roll.toString(16)}</p>
+                        <h4 class="font-black text-[11px] uppercase text-white font-space">${r.name}</h4>
+                    </div>
+                    <div class="flex gap-1">
+                        ${[1,2,3,4,5,6,7].map(l => `
+                            <div class="w-5 h-5 rounded-md flex items-center justify-center text-[8px] font-black
+                                ${r[`L${l}`] === 'P' ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-800 text-slate-600'}">
+                                ${l}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function saveDB() {
+            localStorage.setItem('eduauth_attendance_db', JSON.stringify(attendanceDB));
+            localStorage.setItem('eduauth_students_db', JSON.stringify(studentsDB));
+            const status = document.getElementById('save-status');
+            status.style.opacity = '1';
+            setTimeout(() => status.style.opacity = '0', 2000);
+        }
+
+        function showToast(msg, isSuccess = false) {
+            const t = document.getElementById('toast');
+            const icon = document.getElementById('toast-icon');
+            document.getElementById('toast-msg').innerText = msg;
+            icon.className = `w-2 h-2 rounded-full ${isSuccess ? 'bg-emerald-500' : 'bg-indigo-500'}`;
+            t.style.transform = 'translateY(0) translateX(-50%)';
+            setTimeout(() => t.style.transform = 'translateY(200%) translateX(-50%)', 3000);
+        }
+
+        function closeModal() { document.getElementById('confirm-modal').classList.remove('active'); }
+        function performReset() { localStorage.clear(); location.reload(); }
+
+        // --- LISTENERS ---
+        startBtn.onclick = startOptics;
+        enrollToggle.onclick = () => enrollPanel.classList.toggle('hidden');
+        captureFaceBtn.onclick = captureBiometrics;
+        aiAuditBtn.onclick = runAudit;
+        clearDbBtn.onclick = () => document.getElementById('confirm-modal').classList.add('active');
+        
+        document.getElementById('add-student-btn').onclick = () => {
+            const name = document.getElementById('new-name').value.trim();
+            const roll = parseInt(document.getElementById('new-roll').value);
+            if (!name || isNaN(roll)) return showToast("INVALID_INPUT_DATA");
+            studentsDB.push({ name, roll });
+            saveDB();
+            initStudentDropdown();
+            initDailyRecords();
+            renderAttendance();
+            showToast("ID_REGISTERED", true);
+            document.getElementById('new-name').value = '';
+            document.getElementById('new-roll').value = '';
+        };
+
+        sendChatBtn.onclick = async () => {
+            const q = chatInput.value.trim();
+            if(!q) return;
+            chatWindow.innerHTML += `<div class="bg-emerald-600/20 p-3 rounded-xl border border-emerald-500/20 text-white ml-8 text-right">${q}</div>`;
+            chatInput.value = "";
+            const context = JSON.stringify(attendanceDB.slice(-3));
+            const res = await callOpenRouter(`Logs: ${context}\nUser: ${q}`, "You are EduAuth Neural Chat.");
+            chatWindow.innerHTML += `<div class="bg-slate-800 p-3 rounded-xl border border-white/5 text-slate-300 mr-8">${res}</div>`;
+            chatWindow.scrollTop = chatWindow.scrollHeight;
+        };
+
+        document.getElementById('export-btn').onclick = () => {
+            const ws = XLSX.utils.json_to_sheet(attendanceDB);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+            XLSX.writeFile(wb, `EduAuth_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
+            showToast("DATA_EXPORTED_XLSX", true);
+        };
+    </script>
+</body>
+</html>
