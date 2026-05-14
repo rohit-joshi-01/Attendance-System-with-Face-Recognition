@@ -1,5 +1,5 @@
 ## 🎓 Attendance System with Face Recognition
--- https://rohit-joshi-01.github.io/Attendance-System-with-Face-Recognition/
+ https://rohit-joshi-01.github.io/Attendance-System-with-Face-Recognition/
 
 A browser-based smart attendance system that uses facial recognition to automatically detect and mark student attendance in real-time.
 
